@@ -39,7 +39,7 @@ static const char *backend_display_name(const otr128_backend *backend) {
     if (strcmp(backend->name, "esp32-hw") == 0) {
         return "ESP32-S3 Hardware";
     }
-    if (strcmp(backend->name, "soft") == 0) {
+    if (strcmp(backend->name, "soft") == 0 || strcmp(backend->name, "software") == 0) {
         return NULL;
     }
     if (strcmp(backend->name, "nrf52-hw") == 0) {

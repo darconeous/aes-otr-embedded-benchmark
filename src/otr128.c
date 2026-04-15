@@ -2,21 +2,45 @@
 
 #include <string.h>
 
+static uint64_t load_u64_unaligned(const uint8_t *src) {
+    uint64_t value;
+    memcpy(&value, src, sizeof(value));
+    return value;
+}
+
+static void store_u64_unaligned(uint8_t *dst, uint64_t value) {
+    memcpy(dst, &value, sizeof(value));
+}
+
+static void copy_block(uint8_t out[OTR128_BLOCK_SIZE], const uint8_t in[OTR128_BLOCK_SIZE]) {
+    memcpy(out, in, OTR128_BLOCK_SIZE);
+}
+
 static void xor_block(uint8_t out[OTR128_BLOCK_SIZE],
                       const uint8_t a[OTR128_BLOCK_SIZE],
                       const uint8_t b[OTR128_BLOCK_SIZE]) {
+#if defined(ESP_PLATFORM)
     size_t i;
     for (i = 0; i < OTR128_BLOCK_SIZE; ++i) {
         out[i] = (uint8_t)(a[i] ^ b[i]);
     }
+#else
+    store_u64_unaligned(&out[0], load_u64_unaligned(&a[0]) ^ load_u64_unaligned(&b[0]));
+    store_u64_unaligned(&out[8], load_u64_unaligned(&a[8]) ^ load_u64_unaligned(&b[8]));
+#endif
 }
 
 static void xor_block_inplace(uint8_t acc[OTR128_BLOCK_SIZE],
                               const uint8_t block[OTR128_BLOCK_SIZE]) {
+#if defined(ESP_PLATFORM)
     size_t i;
     for (i = 0; i < OTR128_BLOCK_SIZE; ++i) {
         acc[i] ^= block[i];
     }
+#else
+    store_u64_unaligned(&acc[0], load_u64_unaligned(&acc[0]) ^ load_u64_unaligned(&block[0]));
+    store_u64_unaligned(&acc[8], load_u64_unaligned(&acc[8]) ^ load_u64_unaligned(&block[8]));
+#endif
 }
 
 static void copy_pad10(uint8_t out[OTR128_BLOCK_SIZE], const uint8_t *in, size_t len) {
@@ -151,7 +175,7 @@ static int ef_serial(otr128_ctx *ctx,
     size_t i;
 
     memset(sum, 0, sizeof(sum));
-    memcpy(l, u, OTR128_BLOCK_SIZE);
+    copy_block(l, u);
     gf_triple(u, ls);
 
     if (pt_len != 0u) {
@@ -192,7 +216,7 @@ static int ef_serial(otr128_ctx *ctx,
         }
         copy_pad10(last_block, &pt[ell * 32u], last);
         xor_block_inplace(sum, last_block);
-        memcpy(last_mask, l, OTR128_BLOCK_SIZE);
+        copy_block(last_mask, l);
     } else {
         const uint8_t *m0 = &pt[ell * 32u];
         const uint8_t *m1 = &pt[ell * 32u + OTR128_BLOCK_SIZE];
@@ -215,7 +239,7 @@ static int ef_serial(otr128_ctx *ctx,
             return OTR128_ERR_BACKEND;
         }
         xor_block(c0, tmp, m0);
-        memcpy(last_mask, ls, OTR128_BLOCK_SIZE);
+        copy_block(last_mask, ls);
     }
 
     gf_double(last_mask, tmp);
@@ -247,7 +271,7 @@ static int df_serial(otr128_ctx *ctx,
     size_t i;
 
     memset(sum, 0, sizeof(sum));
-    memcpy(l, u, OTR128_BLOCK_SIZE);
+    copy_block(l, u);
     gf_triple(u, ls);
 
     if (ct_len != 0u) {
@@ -288,7 +312,7 @@ static int df_serial(otr128_ctx *ctx,
         }
         copy_pad10(last_block, &pt[ell * 32u], last);
         xor_block_inplace(sum, last_block);
-        memcpy(last_mask, l, OTR128_BLOCK_SIZE);
+        copy_block(last_mask, l);
     } else {
         const uint8_t *c0 = &ct[ell * 32u];
         const uint8_t *c1 = &ct[ell * 32u + OTR128_BLOCK_SIZE];
@@ -311,7 +335,7 @@ static int df_serial(otr128_ctx *ctx,
             m1[i] = (uint8_t)(z[i] ^ c1[i]);
         }
         xor_block_inplace(sum, z);
-        memcpy(last_mask, ls, OTR128_BLOCK_SIZE);
+        copy_block(last_mask, ls);
     }
 
     gf_double(last_mask, tmp);
